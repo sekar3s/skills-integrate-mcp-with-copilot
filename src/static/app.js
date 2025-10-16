@@ -3,6 +3,117 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  
+  // Authentication elements
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const userInfo = document.getElementById("user-info");
+  const usernameDisplay = document.getElementById("username-display");
+  const signupContainer = document.getElementById("signup-container");
+  const closeModal = document.querySelector(".close");
+  
+  // Authentication state
+  let authToken = localStorage.getItem("authToken");
+  let currentUser = localStorage.getItem("currentUser");
+  
+  // Update UI based on auth state
+  function updateAuthUI() {
+    if (authToken && currentUser) {
+      loginBtn.classList.add("hidden");
+      userInfo.classList.remove("hidden");
+      signupContainer.classList.remove("hidden");
+      usernameDisplay.textContent = `👤 ${currentUser}`;
+    } else {
+      loginBtn.classList.remove("hidden");
+      userInfo.classList.add("hidden");
+      signupContainer.classList.add("hidden");
+    }
+  }
+  
+  // Show login modal
+  loginBtn.addEventListener("click", () => {
+    loginModal.classList.remove("hidden");
+  });
+  
+  // Close login modal
+  closeModal.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginError.classList.add("hidden");
+  });
+  
+  // Close modal when clicking outside
+  window.addEventListener("click", (event) => {
+    if (event.target === loginModal) {
+      loginModal.classList.add("hidden");
+      loginError.classList.add("hidden");
+    }
+  });
+  
+  // Handle login
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    
+    try {
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        authToken = result.token;
+        currentUser = result.username;
+        localStorage.setItem("authToken", authToken);
+        localStorage.setItem("currentUser", currentUser);
+        loginModal.classList.add("hidden");
+        loginForm.reset();
+        loginError.classList.add("hidden");
+        updateAuthUI();
+        fetchActivities(); // Refresh to show delete buttons
+      } else {
+        loginError.textContent = result.detail || "Login failed";
+        loginError.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginError.textContent = "Login failed. Please try again.";
+      loginError.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
+  
+  // Handle logout
+  logoutBtn.addEventListener("click", async () => {
+    try {
+      await fetch("/logout", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+    
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("currentUser");
+    updateAuthUI();
+    fetchActivities(); // Refresh to hide delete buttons
+  });
+  
+  // Initialize auth UI
+  updateAuthUI();
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
+        // Create participants HTML with delete icons (only for authenticated teachers)
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -30,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${authToken ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>` : ''}</li>`
                   )
                   .join("")}
               </ul>
@@ -80,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
         }
       );
 
@@ -124,6 +238,9 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
         }
       );
 
